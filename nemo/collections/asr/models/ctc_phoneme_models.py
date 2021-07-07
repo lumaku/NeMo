@@ -50,7 +50,7 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
         phonemes_file = self.register_artifact('phonemes_file', phonemes_file)
 
         # Create WordTokenizer and override number of classes in the decoder if a placeholder was given
-        self.tokenizer = tokenizers.WordTokenizer(vocab_file=cfg['phonemes_file'])
+        self.tokenizer = tokenizers.WordTokenizer(vocab_file=phonemes_file)
         vocabulary = self.tokenizer.vocab
 
         with open_dict(cfg):
@@ -145,6 +145,8 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
 
         """
         # TODO: Update this for phonemes
+        pass
+        """
         if self.decoder.vocabulary == new_vocabulary:
             logging.warning(f"Old {self.decoder.vocabulary} and new {new_vocabulary} match. Not changing anything.")
         else:
@@ -183,3 +185,4 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
                         self.cfg[key]['labels'] = OmegaConf.create(new_vocabulary)  # TODO: change this
 
             logging.info(f"Changed decoder to output to {self.decoder.vocabulary} vocabulary.")
+            """
