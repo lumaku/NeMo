@@ -329,13 +329,18 @@ class ModelPT(LightningModule, Model):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_yaml = path.join(tmpdir, _MODEL_CONFIG_YAML)
             model_weights = path.join(tmpdir, _MODEL_WEIGHTS)
+            logging.info("c - default save to - start")
             self.to_config_file(path2yaml_file=config_yaml)
+            logging.info("d - default save to - to_config_file done")
             if hasattr(self, 'artifacts') and self.artifacts is not None:
                 self._handle_artifacts(nemo_file_folder=tmpdir)
                 # We should not update self._cfg here - the model can still be in use
                 self._update_artifact_paths(path2yaml_file=config_yaml)
+            logging.info("e - default save to - artifact updates done")
             torch.save(self.state_dict(), model_weights)
+            logging.info("f - default save to - torch save done")
             self._make_nemo_file_from_folder(filename=save_path, source_dir=tmpdir)
+            logging.info("g - default save to - finished")
 
     @rank_zero_only
     def save_to(self, save_path: str):
