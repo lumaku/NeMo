@@ -33,10 +33,17 @@ def main(cfg):
     asr_model = EncDecCTCModelPhoneme(cfg=cfg.model, trainer=trainer)
 
     # Initialize the weights of the model from another model, if provided via config
+    non_phoneme_ckpt_path = cfg.get('init_from_non_phoneme_model', None)
     ckpt_path = cfg.get('init_from_nemo_model', None)
-    if ckpt_path is not None:
-        ckpt_model = EncDecCTCModel.restore_from(ckpt_path)
+
+    if non_phoneme_ckpt_path:
+        ckpt_model = EncDecCTCModel.restore_from(non_phoneme_ckpt_path)
         ckpt_model.change_vocabulary(list(asr_model.tokenizer.vocab.keys()))
+        asr_model.load_state_dict(ckpt_model.state_dict(), strict=False)
+        del ckpt_model
+    elif ckpt_path:
+        ckpt_model = EncDecCTCModelPhoneme.restore_from(ckpt_path)
+        ckpt_model.change_vocabulary(cfg.model['phonemes_file'])
         asr_model.load_state_dict(ckpt_model.state_dict(), strict=False)
         del ckpt_model
 
@@ -52,6 +59,8 @@ def main(cfg):
         )
         if asr_model.prepare_test(test_trainer):
             test_trainer.test(asr_model)
+
+    # asr_model.save_to('/home/jocelynh/Desktop/checkpoints/phoneme_asr//finetune_qn_base_50ep_2021-07-02/checkpoints/finetune_asr_phonemes.nemo')
 
 
 if __name__ == '__main__':

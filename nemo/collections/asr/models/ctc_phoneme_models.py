@@ -127,62 +127,59 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
             pin_memory=config.get('pin_memory', False),
         )
 
-    def change_vocabulary(self, new_vocabulary: List[str]):
+    def change_vocabulary(self, new_phonemes_file: str):
         """
-        Changes vocabulary used during CTC decoding process. Use this method when fine-tuning on from pre-trained model.
+        Changes vocabulary of the tokenizer used during CTC decoding process.
+        Use this method when fine-tuning on from pre-trained model.
         This method changes only decoder and leaves encoder and pre-processing modules unchanged. For example, you would
         use it if you want to use pretrained encoder when fine-tuning on a data in another language, or when you'd need
         model to learn capitalization, punctuation and/or special characters.
 
-        If new_vocabulary == self.decoder.vocabulary then nothing will be changed.
-
         Args:
-
-            new_vocabulary: list with new vocabulary. Must contain at least 2 elements. Typically, \
-            this is target alphabet.
+            new_phonemes_file: Path to the new phonemes file.
 
         Returns: None
-
         """
-        # TODO: Update this for phonemes
-        pass
-        """
-        if self.decoder.vocabulary == new_vocabulary:
-            logging.warning(f"Old {self.decoder.vocabulary} and new {new_vocabulary} match. Not changing anything.")
-        else:
-            if new_vocabulary is None or len(new_vocabulary) == 0:
-                raise ValueError(f'New vocabulary must be non-empty list of chars. But I got: {new_vocabulary}')
-            decoder_config = self.decoder.to_config_dict()
-            new_decoder_config = copy.deepcopy(decoder_config)
-            new_decoder_config['vocabulary'] = new_vocabulary
-            new_decoder_config['num_classes'] = len(new_vocabulary)
+        phonemes_file = self.register_artifact('phonemes_file', new_phonemes_file)
 
-            del self.decoder
-            self.decoder = EncDecCTCModel.from_config_dict(new_decoder_config)
-            del self.loss
-            self.loss = CTCLoss(
-                num_classes=self.decoder.num_classes_with_blank - 1,
-                zero_infinity=True,
-                reduction=self._cfg.get("ctc_reduction", "mean_batch"),
+        # Create new tokenizer
+        del self.tokenizer
+        self.tokenizer = tokenizers.WordTokenizer(vocab_file=phonemes_file)
+
+        # Set the new vocabulary
+        vocabulary = self.tokenizer.vocab
+        decoder_config = copy.deepcopy(self.decoder.to_config_dict())
+        decoder_config.vocabulary = ListConfig(list(vocabulary.keys()))
+
+        decoder_num_classes = decoder_config['num_classes']
+
+        # Override number of classes if placeholder provided
+        logging.info(
+            "\nReplacing old number of classes ({}) with new number of classes - {}".format(
+                decoder_num_classes, len(vocabulary)
             )
-            self._wer = PER(
-                tokenizer=self.tokenizer,
-                batch_dim_index=0,
-                ctc_decode=True,
-                dist_sync_on_step=True,
-                log_prediction=self._cfg.get("log_prediction", False),
-            )
+        )
+        decoder_config['num_classes'] = len(vocabulary)
 
-            # Update config
-            OmegaConf.set_struct(self._cfg.decoder, False)
-            self._cfg.decoder = new_decoder_config
-            OmegaConf.set_struct(self._cfg.decoder, True)
+        del self.decoder
+        self.decoder = EncDecCTCModelPhoneme.from_config_dict(decoder_config)
+        del self.loss
+        self.loss = CTCLoss(
+            num_classes=self.decoder.num_classes_with_blank - 1,
+            zero_infinity=True,
+            reduction=self._cfg.get("ctc_reduction", "mean_batch"),
+        )
+        self._wer = PER(
+            tokenizer=self.tokenizer,
+            batch_dim_index=0,
+            ctc_decode=True,
+            dist_sync_on_step=True,
+            log_prediction=self._cfg.get("log_prediction", False),
+        )
 
-            ds_keys = ['train_ds', 'validation_ds', 'test_ds']
-            for key in ds_keys:
-                if key in self.cfg:
-                    with open_dict(self.cfg[key]):
-                        self.cfg[key]['labels'] = OmegaConf.create(new_vocabulary)  # TODO: change this
+        # Update config
+        OmegaConf.set_struct(self._cfg.decoder, False)
+        self._cfg.decoder = decoder_config
+        OmegaConf.set_struct(self._cfg.decoder, True)
 
-            logging.info(f"Changed decoder to output to {self.decoder.vocabulary} vocabulary.")
-            """
+        logging.info(f"Changed tokenizer vocabulary to {self.decoder.vocabulary}.")
